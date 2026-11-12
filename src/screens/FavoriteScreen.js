@@ -1,23 +1,22 @@
 import React, { useContext } from "react";
 import {
-  View,
-  Text,
   FlatList,
-  TouchableOpacity,
-  StyleSheet,
   Alert,
 } from "react-native";
 
 import { favoritos } from "../data/favoritos";
-import { textoHorario } from "../data/restaurantes";
 import Menu from "../components/Menu";
+import CartaoRestaurante from "../components/CartaoRestaurante";
+import { Botao, EstadoVazio, Tela, useRespiroMenu } from "../components/UI";
 import { ThemeContext } from "../context/ThemeContext";
+import { espaco } from "../theme/tema";
 
 export default function FavoriteScreen({
   navigation,
 }) {
   const { cores } =
     useContext(ThemeContext);
+  const respiro = useRespiroMenu();
 
   function removerFavorito(id) {
     const index = favoritos.findIndex(
@@ -39,54 +38,29 @@ export default function FavoriteScreen({
   }
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          backgroundColor:
-            cores.fundo,
-        },
-      ]}
-    >
-      <Text
-        style={[
-          styles.titulo,
-          {
-            color:
-              cores.texto,
-          },
-        ]}
-      >
-        Favoritos
-      </Text>
-
+    <Tela cores={cores}>
       {favoritos.length === 0 ? (
-        <Text
-          style={[
-            styles.vazio,
-            {
-              color:
-                cores.secundario,
-            },
-          ]}
-        >
-          Nenhum restaurante favoritado.
-        </Text>
+        <EstadoVazio
+          cores={cores}
+          icone="heart-outline"
+          titulo="Nenhum restaurante favoritado."
+          texto="Toque no coração dentro de um restaurante para guardá-lo aqui."
+        />
       ) : (
         <FlatList
           data={favoritos}
           keyExtractor={(item) =>
             item.id.toString()
           }
+          contentContainerStyle={{
+            padding: espaco.xl,
+            paddingBottom: respiro,
+          }}
+          showsVerticalScrollIndicator={false}
           renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                styles.card,
-                {
-                  backgroundColor:
-                    cores.card,
-                },
-              ]}
+            <CartaoRestaurante
+              restaurante={item}
+              cores={cores}
               onPress={() =>
                 navigation.navigate(
                   "Restaurant",
@@ -96,122 +70,25 @@ export default function FavoriteScreen({
                 )
               }
             >
-              <Text
-                style={[
-                  styles.nome,
-                  {
-                    color: cores.texto,
-                  },
-                ]}
-              >
-                {item.nome}
-              </Text>
-
-              {!!item.descricao && (
-                <Text
-                  style={[
-                    styles.categoria,
-                    {
-                      color: cores.secundario,
-                    },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {item.descricao}
-                </Text>
-              )}
-
-              {!!textoHorario(item) && (
-                <Text
-                  style={[
-                    styles.nota,
-                    {
-                      color: cores.principal,
-                    },
-                  ]}
-                >
-                  🕒 {textoHorario(item)}
-                </Text>
-              )}
-
-              <TouchableOpacity
-                style={
-                  styles.botaoRemover
-                }
+              <Botao
+                cores={cores}
+                titulo="Remover"
+                icone="heart-dislike-outline"
+                variante="perigo"
+                pequeno
+                estilo={{ marginTop: espaco.md }}
                 onPress={() =>
                   removerFavorito(
                     item.id
                   )
                 }
-              >
-                <Text
-                  style={
-                    styles.botaoTexto
-                  }
-                >
-                  Remover
-                </Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
+              />
+            </CartaoRestaurante>
           )}
         />
       )}
 
       <Menu navigation={navigation} />
-    </View>
+    </Tela>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 15,
-    paddingBottom: 80,
-  },
-
-  titulo: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-
-  vazio: {
-    textAlign: "center",
-    marginTop: 40,
-    fontSize: 18,
-  },
-
-  card: {
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
-    elevation: 3,
-  },
-
-  nome: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-
-  categoria: {
-    marginTop: 5,
-  },
-
-  nota: {
-    marginTop: 5,
-    fontWeight: "bold",
-  },
-
-  botaoRemover: {
-    marginTop: 10,
-    backgroundColor: "#FF6B00",
-    padding: 10,
-    borderRadius: 8,
-  },
-
-  botaoTexto: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "bold",
-  },
-});

@@ -2,14 +2,56 @@ import React, { useContext } from "react";
 import {
   View,
   Text,
-  TouchableOpacity,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Switch,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import { supabase } from "../lib/supabase";
 import Menu from "../components/Menu";
+import { Botao, Cabecalho, Cartao, Tela, useRespiroMenu } from "../components/UI";
 import { ThemeContext } from "../context/ThemeContext";
+import { espaco, fonte } from "../theme/tema";
+
+// Linha do menu de conta
+function Linha({ cores, icone, titulo, detalhe, onPress, ultima, direita }) {
+  const conteudo = (
+    <View
+      style={[
+        styles.item,
+        !ultima && { borderBottomWidth: 1, borderBottomColor: cores.borda },
+      ]}
+    >
+      <View style={[styles.itemIcone, { backgroundColor: cores.principalSuave }]}>
+        <Ionicons name={icone} size={19} color={cores.principal} />
+      </View>
+
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.itemTexto, { color: cores.texto }]}>{titulo}</Text>
+        {!!detalhe && (
+          <Text style={{ color: cores.secundario, fontSize: fonte.pequena, marginTop: 1 }}>
+            {detalhe}
+          </Text>
+        )}
+      </View>
+
+      {direita ??
+        (onPress && (
+          <Ionicons name="chevron-forward" size={18} color={cores.secundario} />
+        ))}
+    </View>
+  );
+
+  if (!onPress) return conteudo;
+
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => pressed && { opacity: 0.7 }}>
+      {conteudo}
+    </Pressable>
+  );
+}
 
 export default function ProfileScreen({
   navigation,
@@ -21,305 +63,178 @@ export default function ProfileScreen({
     setTemaEscuro,
     cores,
   } = useContext(ThemeContext);
+  const respiro = useRespiroMenu();
 
   React.useEffect(() => {
     let mounted = true;
-
     async function loadUser() {
       try {
-        if (!supabase?.auth?.getUser) return;
-
-        const { data } = await supabase.auth.getUser();
-        const user = data?.user;
-        if (!user || !mounted) return;
-
-        setUserEmail(user.email);
-        setUserName(user.user_metadata?.nome || user.email);
-
-        // O nome oficial fica em public.clientes
-        if (supabase.from) {
-          const { data: cliente } = await supabase
-            .from("clientes")
-            .select("nome")
-            .eq("id", user.id)
-            .maybeSingle();
-
-          if (cliente?.nome && mounted) setUserName(cliente.nome);
+        if (supabase && supabase.auth) {
+          if (typeof supabase.auth.getUser === "function") {
+            const { data, error } = await supabase.auth.getUser();
+            const user = data?.user;
+            if (user && mounted) {
+              setUserName(user.user_metadata?.name || user.email);
+              setUserEmail(user.email);
+            }
+          } else if (typeof supabase.auth.getSession === "function") {
+            const { data } = await supabase.auth.getSession();
+            const user = data?.session?.user;
+            if (user && mounted) {
+              setUserName(user.user_metadata?.name || user.email);
+              setUserEmail(user.email);
+            }
+          }
         }
       } catch (e) {
         console.warn("Erro ao obter usuário do Supabase:", e);
       }
     }
-
     loadUser();
     return () => {
       mounted = false;
     };
   }, []);
 
-  async function encerrarSessao() {
-    try {
-      await supabase.auth.signOut();
-    } catch (e) {
-      console.warn("Erro ao sair:", e);
-    }
-
-    navigation.replace("Login");
-  }
+  const inicial = (userName ?? "U").trim().charAt(0).toUpperCase();
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          backgroundColor: cores.fundo,
-        },
-      ]}
-    >
-      <Text
-        style={[
-          styles.titulo,
-          {
-            color: cores.texto,
-          },
-        ]}
+    <Tela cores={cores} topo>
+      <ScrollView
+        contentContainerStyle={[styles.conteudo, { paddingBottom: respiro }]}
+        showsVerticalScrollIndicator={false}
       >
-        Conta
-      </Text>
+        <Cabecalho cores={cores} titulo="Conta" />
 
-      <View
-        style={[
-          styles.avatar,
-          {
-            backgroundColor:
-              cores.comida,
-          },
-        ]}
-      >
-        <Text style={styles.avatarIcone}>
-          🍔
-        </Text>
-      </View>
+        <View style={styles.perfil}>
+          <View style={[styles.avatar, { backgroundColor: cores.comida }]}>
+            <Text style={styles.avatarInicial}>{inicial}</Text>
+          </View>
 
-      <Text
-        style={[
-          styles.nome,
-          {
-            color: cores.texto,
-          },
-        ]}
-      >
-        Olá, {userName ?? "Usuário"}
-      </Text>
-
-      <Text
-        style={[
-          styles.email,
-          {
-            color:
-              cores.secundario,
-          },
-        ]}
-      >
-        {userEmail ?? ""}
-      </Text>
-
-      <View
-        style={[
-          styles.menuCard,
-          {
-            backgroundColor:
-              cores.card,
-          },
-        ]}
-      >
-        <View style={styles.item}>
-          <Text
-            style={[
-              styles.itemTexto,
-              {
-                color:
-                  cores.texto,
-              },
-            ]}
-          >
-            {temaEscuro
-              ? " Tema Escuro"
-              : " Tema Claro"}
+          <Text style={[styles.nome, { color: cores.texto }]}>
+            Olá, {userName ?? "Usuário"}
           </Text>
 
-          <Switch
-            value={temaEscuro}
-            onValueChange={
-              setTemaEscuro
-            }
-          />
+          <Text style={[styles.email, { color: cores.secundario }]}>
+            {userEmail ?? ""}
+          </Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.item}
-          onPress={() =>
-            navigation.navigate(
-              "Pedidos"
-            )
-          }
-        >
-          <Text
-            style={[
-              styles.itemTexto,
-              {
-                color: cores.texto,
-              },
-            ]}
-          >
-            Meus Pedidos
-          </Text>
+        <View style={{ paddingHorizontal: espaco.xl }}>
+          <Cartao cores={cores} estilo={styles.menuCard}>
+            <Linha
+              cores={cores}
+              icone={temaEscuro ? "moon" : "sunny"}
+              titulo={temaEscuro ? "Tema Escuro" : "Tema Claro"}
+              direita={
+                <Switch
+                  value={temaEscuro}
+                  onValueChange={setTemaEscuro}
+                  trackColor={{ true: cores.principal }}
+                />
+              }
+            />
 
-          <Text
-            style={{
-              color:
-                cores.secundario,
-            }}
-          >
-            Acompanhar
-          </Text>
-        </TouchableOpacity>
+            <Linha
+              cores={cores}
+              icone="heart"
+              titulo="Favoritos"
+              detalhe="Restaurantes"
+              onPress={() => navigation.navigate("Favoritos")}
+            />
 
-        <TouchableOpacity
-          style={[
-            styles.item, 
-            {
-              color: cores.texto,
-            },
-          ]}
-          onPress={() =>
-            navigation.navigate(
-              "Favoritos"
-            )
-          }
-        >
-          <Text
-            style={[
-              styles.itemTexto,
-              {
-                color:
-                  cores.favorito,
-              },
-            ]}
-          >
-            Favoritos
-          </Text>
+            <Linha
+              cores={cores}
+              icone="card"
+              titulo="Meus cartões"
+              detalhe="Pagamento"
+              onPress={() => navigation.navigate("Cartoes")}
+              ultima
+            />
+          </Cartao>
+        </View>
 
-          <Text
-            style={{
-              color:
-                cores.secundario,
-            }}
-          >
-            Restaurantes
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={styles.botao}
-          onPress={encerrarSessao}
-        >
-          <Text
-            style={
-              styles.botaoTexto
-            }
-          >
-            Encerrar Sessão
-          </Text>
-        </TouchableOpacity>
-      </View>
+        <View style={styles.footer}>
+          <Botao
+            cores={cores}
+            titulo="Encerrar Sessão"
+            icone="log-out-outline"
+            variante="perigo"
+            onPress={() => navigation.replace("Login")}
+          />
+        </View>
+      </ScrollView>
 
       <Menu navigation={navigation} />
-    </View>
+    </Tela>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    paddingBottom: 90,
+  perfil: {
+    alignItems: "center",
+    marginBottom: espaco.xl,
   },
 
-  titulo: {
-    fontSize: 28,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginTop: 20,
+  conteudo: {
+    flexGrow: 1,
   },
 
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    alignSelf: "center",
-    justifyContent: "center",
+    width: 92,
+    height: 92,
+    borderRadius: 46,
     alignItems: "center",
-    marginTop: 30,
+    justifyContent: "center",
+    marginTop: espaco.sm,
   },
 
-  avatarIcone: {
-    fontSize: 45,
+  avatarInicial: {
+    color: "#FFFFFF",
+    fontSize: 40,
+    fontWeight: "800",
   },
 
   nome: {
-    fontSize: 24,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginTop: 20,
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+    marginTop: espaco.lg,
   },
 
   email: {
-    textAlign: "center",
-    marginTop: 5,
-    marginBottom: 30,
-    fontSize: 16,
+    marginTop: 2,
+    fontSize: fonte.corpo,
   },
 
   menuCard: {
-    borderRadius: 15,
-    padding: 10,
+    paddingVertical: 4,
+    paddingHorizontal: espaco.lg,
   },
 
   item: {
     flexDirection: "row",
-    justifyContent:
-      "space-between",
     alignItems: "center",
-    paddingVertical: 18,
-    borderBottomWidth: 1,
-    borderBottomColor:
-      "#33333320",
+    gap: espaco.md,
+    paddingVertical: espaco.md + 2,
+  },
+
+  itemIcone: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   itemTexto: {
-    fontSize: 16,
+    fontSize: fonte.corpo + 1,
     fontWeight: "600",
   },
 
   footer: {
-    flex: 1,
     justifyContent: "flex-end",
-    marginBottom: 80,
-  },
-
-  botao: {
-    backgroundColor: "#FF6B00",
-    padding: 15,
-    borderRadius: 10,
-  },
-
-  botaoTexto: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "bold",
-    fontSize: 16,
+    paddingHorizontal: espaco.xl,
+    paddingTop: espaco.xl,
   },
 });

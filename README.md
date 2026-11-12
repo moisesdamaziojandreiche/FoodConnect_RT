@@ -203,6 +203,80 @@ Se o Asaas pausar a fila por falhas, reative manualmente no painel.
    ```
 3. Cadastrar o webhook novamente na conta de produção.
 
+# App: cartões salvos + "salvar cartão para próximas compras"
+
+Antes do app, o backend precisa estar no ar (pasta `cartoes/`): SQL `03_cartoes_salvos.sql` rodado
+e as funções `salvar-cartao` e `create-payment` com deploy feito.
+
+## Arquivos (copie para a raiz do projeto `FoodConnect_RT`, mantendo as pastas)
+
+| Arquivo | O que é |
+|---|---|
+| `src/lib/cartaoUtils.js` | **Novo.** Máscaras e validações (cartão, CPF, validade, CEP, telefone) |
+| `src/lib/cartoes.js` | **Novo.** Chamadas: listar, salvar, remover cartão, buscar CPF |
+| `src/components/CartaoForm.js` | **Novo.** Campos do formulário de cartão (usado nas duas telas) |
+| `src/screens/CardsScreen.js` | **Novo.** Tela "Meus cartões" (lista, adicionar, remover) |
+| `src/screens/CartScreen.js` | **Substitui a atual.** Forma de pagamento + "Salvar cartão para próximas compras" |
+| `src/screens/ProfileScreen.js` | **Substitui a atual.** Só ganhou a linha "Meus cartões" |
+| `App.js` | **Substitui o atual.** Só ganhou 2 imports e 2 rotas: `Cartoes` e `Pedidos` |
+
+Não há dependência nova: nada para instalar.
+
+## Como funciona
+
+**Meus cartões** (Perfil → Meus cartões): lista "Visa •••• 4242", botão Remover e "Adicionar cartão".
+
+**Na hora de pagar** (Carrinho → Forma de pagamento):
+- cada cartão salvo aparece como opção; o mais recente já vem marcado;
+- **Pagar com novo cartão**: abre o formulário e a chave **"Salvar cartão para próximas compras"**
+  - ligada: o cartão fica salvo depois do pagamento;
+  - desligada: o cartão é usado e removido logo em seguida;
+  - se o cartão for **recusado**, ele não fica salvo em nenhum dos casos;
+- **Pix ou outros meios**: igual ao que existia (abre a página do Asaas).
+
+Resultados: 402 mostra "Pagamento recusado" com o motivo; 202 mostra "em processamento";
+sucesso leva para **Meus pedidos**, que atualiza sozinho quando o webhook confirma.
+
+## O que encontrei no código do app e corrigi (precisa do seu OK)
+
+1. **O carrinho chamava o contrato antigo (Mercado Pago).** Enviava `restauranteId` / `items` /
+   `produtoId` e esperava `initPoint`, mas a função do Asaas recebe `empresa_id` / `itens` /
+   `produto_id` e devolve `invoice_url`. Com o código antigo, o pagamento falharia com "Pedido
+   inválido". Corrigido no `CartScreen.js`.
+2. **Faltava o CPF.** O cadastro do app só pede nome, e `create-payment` exige CPF. Agora o carrinho
+   (e a tela de cartões) pede o CPF **uma vez**, só se o cliente ainda não tiver; o servidor guarda.
+3. **A rota `Pedidos` não existia em `App.js`**, mas o carrinho navegava para ela. Registrada.
+
+## O que NÃO mexi, mas você precisa conferir
+
+- **`src/data/restaurantes.js` lê colunas que não estão no esquema novo** (`02_esquema`):
+  `empresas.categoria`, `empresas.nota`, `empresas.tempo_preparo_min` e `produtos.ordem`.
+  Se o seu banco é esse esquema, a Home e o cardápio dão erro de "column does not exist".
+  Se isso já funciona para você, o banco tem essas colunas a mais e pode ignorar este item.
+- **A pasta `supabase/functions` do projeto tem a `create-payment` antiga e a `mp-webhook`**
+  (Mercado Pago). Não faça deploy a partir dela: use os arquivos da pasta `cartoes/`.
+  Vale substituir a `create-payment` dessa pasta pela nova para o projeto não divergir do que está no ar.
+
+## Testar (Expo)
+
+1. `npx expo start` e abra no celular (Expo Go) ou emulador.
+2. Perfil → Meus cartões → Adicionar cartão. Deve aparecer "Cartão salvo" e a bandeira com o final.
+3. Carrinho: o cartão salvo vem marcado. Finalizar → "Pagamento enviado" → tela Meus pedidos.
+   O pedido vira "Pagamento aprovado — aguardando o restaurante" assim que o Asaas confirmar.
+4. Carrinho → "Pagar com novo cartão" com a chave desligada: depois do pagamento, o cartão **não**
+   aparece em Meus cartões.
+5. Recusa: use o Mastercard `5184019740373151` ou o Visa `4916561358240741` (sandbox). Deve mostrar
+   "Pagamento recusado" e o cartão não fica salvo.
+
+## Segurança
+
+- Número e CVV existem só nos campos da tela e na chamada para `salvar-cartao`; são apagados depois
+  do uso. Não há `console.log` nem armazenamento deles.
+- O token do cartão nunca chega ao app (a coluna é bloqueada no banco). Por isso a lista usa
+  `select("id, ultimos_digitos, bandeira")`; `select("*")` daria "permission denied".
+- Remover um cartão apaga o registro no seu banco; o token continua existindo no Asaas, mas só
+  funciona com a sua chave de API e para aquele cliente.
+  
 ## Erros comuns
 
 - **`supabase` não é reconhecido:** use `npx supabase ...`.

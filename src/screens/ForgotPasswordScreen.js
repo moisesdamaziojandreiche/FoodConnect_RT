@@ -1,17 +1,20 @@
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
   Alert,
+  StyleSheet,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../lib/supabase";
+import { ThemeContext } from "../context/ThemeContext";
+import { Botao, Campo, Tela } from "../components/UI";
+import { espaco, fonte } from "../theme/tema";
 
 export default function ForgotPasswordScreen({
   navigation,
 }) {
+  const { cores } = useContext(ThemeContext);
   const [email, setEmail] = useState("");
   async function alterarSenha() {
     if (!email) {
@@ -35,62 +38,66 @@ export default function ForgotPasswordScreen({
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>
-        Recuperar Senha
-      </Text>
+    <Tela cores={cores}>
+      <View style={styles.conteudo}>
+        <View style={[styles.icone, { backgroundColor: cores.principalSuave }]}>
+          <Ionicons name="key-outline" size={32} color={cores.principal} />
+        </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Digite seu e-mail"
-        value={email}
-        onChangeText={setEmail}
-      />
-
-      <TouchableOpacity
-        style={styles.button}
-        onPress={alterarSenha}
-      >
-        <Text style={styles.buttonText}>
-          Alterar Senha
+        <Text style={[styles.titulo, { color: cores.texto }]}>
+          Esqueceu a senha?
         </Text>
-      </TouchableOpacity>
-    </View>
+        <Text style={[styles.subtitulo, { color: cores.secundario }]}>
+          Digite seu e-mail e enviaremos um link para criar uma nova senha.
+        </Text>
+
+        <Campo
+          cores={cores}
+          icone="mail-outline"
+          placeholder="Digite seu e-mail"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          value={email}
+          onChangeText={setEmail}
+        />
+
+        <Botao
+          cores={cores}
+          titulo="Alterar Senha"
+          onPress={alterarSenha}
+          estilo={{ marginTop: espaco.sm }}
+        />
+      </View>
+    </Tela>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  conteudo: {
     flex: 1,
     justifyContent: "center",
-    padding: 25,
+    paddingHorizontal: espaco.xxl,
   },
 
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 25,
-  },
-
-  input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
-  },
-
-  button: {
-    backgroundColor: "#e63946",
-    padding: 15,
-    borderRadius: 10,
+  icone: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     alignItems: "center",
+    justifyContent: "center",
+    marginBottom: espaco.xl,
   },
 
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
+  titulo: {
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: -0.6,
+  },
+
+  subtitulo: {
+    fontSize: fonte.corpo,
+    lineHeight: 22,
+    marginTop: 6,
+    marginBottom: espaco.xl,
   },
 });

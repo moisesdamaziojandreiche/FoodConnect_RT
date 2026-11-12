@@ -4,13 +4,15 @@ import {
   Text,
   FlatList,
   StyleSheet,
-  TouchableOpacity,
 } from "react-native";
 import * as WebBrowser from "expo-web-browser";
+import { Ionicons } from "@expo/vector-icons";
 
 import { supabase } from "../lib/supabase";
 import Menu from "../components/Menu";
+import { Botao, Cabecalho, Cartao, Chip, EstadoVazio, Tela, useRespiroMenu } from "../components/UI";
 import { ThemeContext } from "../context/ThemeContext";
+import { espaco, fonte } from "../theme/tema";
 
 // Mesmos status que o painel do restaurante usa (check de pedidos.status no banco).
 function textoStatus(pedido) {
@@ -40,8 +42,30 @@ function textoStatus(pedido) {
   }
 }
 
+// Cor e ícone do selo de status (mesma lógica de cores do painel do restaurante).
+function tomStatus(status) {
+  switch (status) {
+    case "aguardando_pagamento":
+      return { tom: "alerta", icone: "card-outline" };
+    case "pendente":
+    case "aceito":
+    case "preparando":
+      return { tom: "principal", icone: "flame-outline" };
+    case "pronto":
+    case "saiu_para_entrega":
+      return { tom: "sucesso", icone: "checkmark-circle-outline" };
+    case "entregue":
+      return { tom: "neutro", icone: "bag-check-outline" };
+    case "cancelado":
+      return { tom: "erro", icone: "close-circle-outline" };
+    default:
+      return { tom: "neutro", icone: "ellipse-outline" };
+  }
+}
+
 export default function OrdersScreen({ navigation }) {
   const { cores } = useContext(ThemeContext);
+  const respiro = useRespiroMenu();
 
   const [pedidos, setPedidos] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -102,101 +126,141 @@ export default function OrdersScreen({ navigation }) {
   }, [carregar]);
 
   return (
-    <View style={[styles.container, { backgroundColor: cores.fundo }]}>
-      <Text style={[styles.titulo, { color: cores.texto }]}>
-        Meus Pedidos
-      </Text>
-
+    <Tela cores={cores} topo>
       <FlatList
         data={pedidos}
         keyExtractor={(item) => item.id}
         refreshing={carregando}
         onRefresh={carregar}
-        ListEmptyComponent={
-          <Text style={{ color: cores.secundario }}>
-            {erro
-              ? `Erro ao carregar: ${erro}`
-              : carregando
-              ? "Carregando..."
-              : "Você ainda não fez pedidos."}
-          </Text>
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          paddingHorizontal: espaco.xl,
+          paddingBottom: respiro,
+          flexGrow: 1,
+        }}
+        ListHeaderComponent={
+          <Cabecalho
+            cores={cores}
+            titulo="Meus Pedidos"
+            subtitulo="Acompanhe em tempo real"
+            estilo={{ paddingHorizontal: 0 }}
+          />
         }
-        renderItem={({ item }) => (
-          <View style={[styles.card, { backgroundColor: cores.card }]}>
-            <Text style={[styles.restaurante, { color: cores.texto }]}>
-              {item.empresas?.nome || "Restaurante"}
-            </Text>
+        ListEmptyComponent={
+          <EstadoVazio
+            cores={cores}
+            icone={erro ? "alert-circle-outline" : "receipt-outline"}
+            titulo={
+              erro
+                ? "Não foi possível carregar"
+                : carregando
+                ? "Carregando..."
+                : "Você ainda não fez pedidos."
+            }
+            texto={erro ? `Erro ao carregar: ${erro}` : undefined}
+          />
+        }
+        renderItem={({ item }) => {
+          const { tom, icone } = tomStatus(item.status);
 
-            <Text style={{ color: cores.principal, fontWeight: "bold" }}>
-              {textoStatus(item)}
-            </Text>
+          return (
+            <Cartao cores={cores} estilo={styles.card}>
+              <View style={styles.topo}>
+                <View style={[styles.avatar, { backgroundColor: cores.principalSuave }]}>
+                  <Ionicons name="restaurant" size={18} color={cores.principal} />
+                </View>
 
-            {item.status === "pronto" &&
-              !item.endereco_entrega &&
-              !!item.empresas?.endereco && (
-                <Text style={{ color: cores.texto, marginTop: 4 }}>
-                  Retire em: {item.empresas.endereco}
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.restaurante, { color: cores.texto }]} numberOfLines={1}>
+                    {item.empresas?.nome || "Restaurante"}
+                  </Text>
+                  <Text style={{ color: cores.secundario, fontSize: fonte.pequena }}>
+                    {new Date(item.created_at).toLocaleString("pt-BR")}
+                  </Text>
+                </View>
+
+                <Text style={[styles.valor, { color: cores.texto }]}>
+                  R$ {Number(item.valor_total).toFixed(2)}
                 </Text>
-              )}
+              </View>
 
-            <Text style={{ color: cores.secundario, marginTop: 4 }}>
-              R$ {Number(item.valor_total).toFixed(2)}  •{" "}
-              {new Date(item.created_at).toLocaleString("pt-BR")}
-            </Text>
+              <View style={[styles.divisor, { borderTopColor: cores.borda }]} />
 
-            {item.status === "aguardando_pagamento" &&
-              item.payment_status === "pendente" &&
-              !!item.asaas_invoice_url && (
-                <TouchableOpacity
-                  style={[styles.botaoPagar, { backgroundColor: cores.principal }]}
-                  onPress={() => WebBrowser.openBrowserAsync(item.asaas_invoice_url)}
-                >
-                  <Text style={styles.botaoPagarTexto}>Pagar agora</Text>
-                </TouchableOpacity>
-              )}
-          </View>
-        )}
+              <Chip cores={cores} tom={tom} icone={icone} texto={textoStatus(item)} />
+
+              {item.status === "pronto" &&
+                !item.endereco_entrega &&
+                !!item.empresas?.endereco && (
+                  <View style={styles.retire}>
+                    <Ionicons name="location-outline" size={16} color={cores.secundario} />
+                    <Text style={{ color: cores.texto, flex: 1 }}>
+                      Retire em: {item.empresas.endereco}
+                    </Text>
+                  </View>
+                )}
+
+              {item.status === "aguardando_pagamento" &&
+                item.payment_status === "pendente" &&
+                !!item.asaas_invoice_url && (
+                  <Botao
+                    cores={cores}
+                    titulo="Pagar agora"
+                    icone="wallet-outline"
+                    pequeno
+                    estilo={{ marginTop: espaco.md }}
+                    onPress={() => WebBrowser.openBrowserAsync(item.asaas_invoice_url)}
+                  />
+                )}
+            </Cartao>
+          );
+        }}
       />
 
       <Menu navigation={navigation} />
-    </View>
+    </Tela>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    paddingBottom: 90,
-  },
-
-  titulo: {
-    fontSize: 28,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-
   card: {
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 12,
+    marginBottom: espaco.md,
+  },
+
+  topo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: espaco.md,
+  },
+
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
   },
 
   restaurante: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 4,
+    fontSize: fonte.subtitulo,
+    fontWeight: "800",
+    letterSpacing: -0.2,
   },
 
-  botaoPagar: {
-    marginTop: 10,
-    padding: 10,
-    borderRadius: 8,
+  valor: {
+    fontSize: fonte.subtitulo,
+    fontWeight: "800",
   },
 
-  botaoPagarTexto: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "bold",
+  divisor: {
+    borderTopWidth: 1,
+    borderStyle: "dashed",
+    marginVertical: espaco.md,
+  },
+
+  retire: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: espaco.md,
   },
 });

@@ -1,21 +1,26 @@
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import {
   View,
   Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
   Alert,
-  Image
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
 } from "react-native";
 import { supabase } from "../lib/supabase";
 import { cpfValido, somenteDigitos } from "../../Cpf";
+import { ThemeContext } from "../context/ThemeContext";
+import { Botao, Campo, Tela } from "../components/UI";
+import { espaco, fonte, raio, sombra } from "../theme/tema";
 
 const logo = require("../../assets/FoodConnectImage.png");
 
 export default function RegisterScreen({
   navigation,
 }) {
+  const { cores } = useContext(ThemeContext);
   const [nome, setNome] = useState("");
   const [cpf, setCpf] = useState("");
   const [telefone, setTelefone] = useState("");
@@ -84,118 +89,125 @@ export default function RegisterScreen({
   }
 
   return (
-    <View style={styles.container}>
-      <Image
-        source={logo}
-        style={styles.logo}
-      />
-
-      <Text style={styles.title}>
-        Criar Conta
-      </Text>
-
-      <TextInput
-        style={styles.input}
-        placeholder="Nome"
-        value={nome}
-        onChangeText={setNome}
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="E-mail"
-        keyboardType="email-address"
-        autoCapitalize="none"
-        value={email}
-        onChangeText={setEmail}
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="CPF (opcional)"
-        keyboardType="numeric"
-        maxLength={14}
-        value={cpf}
-        onChangeText={setCpf}
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Telefone (opcional)"
-        keyboardType="phone-pad"
-        value={telefone}
-        onChangeText={setTelefone}
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Senha"
-        secureTextEntry
-        value={senha}
-        onChangeText={setSenha}
-      />
-
-      <TextInput
-        style={styles.input}
-        placeholder="Confirmar Senha"
-        secureTextEntry
-        value={confirmarSenha}
-        onChangeText={setConfirmarSenha}
-      />
-
-      <TouchableOpacity
-        style={styles.button}
-        onPress={cadastrar}
+    <Tela cores={cores}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <Text style={styles.buttonText}>
-          Cadastrar
-        </Text>
-      </TouchableOpacity>
-    </View>
+        <ScrollView
+          contentContainerStyle={styles.conteudo}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={[styles.selo, sombra(cores, 2)]}>
+            <Image source={logo} style={styles.logo} />
+          </View>
+
+          <Text style={[styles.titulo, { color: cores.texto }]}>
+            Criar conta
+          </Text>
+          <Text style={[styles.subtitulo, { color: cores.secundario }]}>
+            Leva menos de um minuto. Depois é só escolher o que comer.
+          </Text>
+
+          <Campo
+            cores={cores}
+            icone="person-outline"
+            placeholder="Nome"
+            value={nome}
+            onChangeText={setNome}
+          />
+
+          <Campo
+            cores={cores}
+            icone="mail-outline"
+            placeholder="E-mail"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+          />
+
+          <Campo
+            cores={cores}
+            icone="id-card-outline"
+            placeholder="CPF (opcional)"
+            keyboardType="numeric"
+            maxLength={14}
+            value={cpf}
+            onChangeText={setCpf}
+          />
+
+          <Campo
+            cores={cores}
+            icone="call-outline"
+            placeholder="Telefone (opcional)"
+            keyboardType="phone-pad"
+            value={telefone}
+            onChangeText={setTelefone}
+          />
+
+          <Campo
+            cores={cores}
+            icone="lock-closed-outline"
+            placeholder="Senha"
+            secureTextEntry
+            value={senha}
+            onChangeText={setSenha}
+          />
+
+          <Campo
+            cores={cores}
+            icone="shield-checkmark-outline"
+            placeholder="Confirmar Senha"
+            secureTextEntry
+            value={confirmarSenha}
+            onChangeText={setConfirmarSenha}
+          />
+
+          <Botao
+            cores={cores}
+            titulo="Cadastrar"
+            onPress={cadastrar}
+            estilo={{ marginTop: espaco.sm }}
+          />
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Tela>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  conteudo: {
+    flexGrow: 1,
     justifyContent: "center",
-    padding: 25,
+    paddingHorizontal: espaco.xxl,
+    paddingVertical: espaco.xl,
   },
-  
-  logo: {
-    width: 300,
-    height: 300,
-    resizeMode: "contain",
+
+  selo: {
     alignSelf: "center",
-    marginBottom: 30,
+    backgroundColor: "#FFFFFF",
+    borderRadius: raio.lg + 6,
+    padding: espaco.sm,
+    marginBottom: espaco.xl,
   },
 
-  title: {
-    fontSize: 30,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 30,
+  logo: {
+    width: 120,
+    height: 120,
+    resizeMode: "contain",
   },
 
-  input: {
-    borderWidth: 1,
-    borderColor: "#FFB366",
-    backgroundColor: "#FFF8F2",
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
+  titulo: {
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: -0.6,
   },
 
-  button: {
-    backgroundColor: "#FF6B00",
-    padding: 15,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-
-  buttonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 18,
+  subtitulo: {
+    fontSize: fonte.corpo,
+    marginTop: 4,
+    marginBottom: espaco.xl,
   },
 });

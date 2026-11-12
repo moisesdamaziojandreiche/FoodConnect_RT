@@ -1,16 +1,12 @@
 import React, { useState, useContext} from "react";
-import {
-  View,
-  TextInput,
-  FlatList,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-} from "react-native";
+import { FlatList, View } from "react-native";
 
-import { useRestaurantes, textoHorario } from "../data/restaurantes";
+import { useRestaurantes } from "../data/restaurantes";
 import Menu from "../components/Menu";
+import CartaoRestaurante from "../components/CartaoRestaurante";
+import { Cabecalho, Campo, EstadoVazio, Tela, useRespiroMenu } from "../components/UI";
 import { ThemeContext } from "../context/ThemeContext";
+import { espaco } from "../theme/tema";
 
 export default function SearchScreen({
   navigation,
@@ -18,6 +14,7 @@ export default function SearchScreen({
   const [busca, setBusca] = useState("");
   const { cores } = useContext(ThemeContext);
   const { restaurantes, carregando, erro } = useRestaurantes();
+  const respiro = useRespiroMenu();
 
   const resultado = restaurantes.filter((r) =>
     r.nome
@@ -26,48 +23,53 @@ export default function SearchScreen({
   );
 
   return (
-    <View style={[styles.container,
-      {
-        backgroundColor: cores.fundo,
-      },
-    ]}>
+    <Tela cores={cores} topo>
+      <Cabecalho cores={cores} titulo="Buscar" subtitulo="Encontre um restaurante pelo nome" />
 
-      <TextInput
-        style={[ styles.input,
-          {
-            backgroundColor: cores.card,
-            color: cores.texto,
-            borderColor: cores.secundario,
-          },
-        ]}
-        placeholder="Buscar restaurante..."
-        value={busca}
-        onChangeText={setBusca}
-      />
+      <View style={{ paddingHorizontal: espaco.xl }}>
+        <Campo
+          cores={cores}
+          icone="search-outline"
+          placeholder="Buscar restaurante..."
+          value={busca}
+          onChangeText={setBusca}
+          autoCorrect={false}
+        />
+      </View>
 
       <FlatList
         data={resultado}
+        contentContainerStyle={{
+          paddingHorizontal: espaco.xl,
+          paddingTop: espaco.sm,
+          paddingBottom: respiro,
+          flexGrow: 1,
+        }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
-          <Text style={{ color: cores.secundario }}>
-            {carregando
-              ? "Carregando restaurantes..."
-              : erro
-              ? `Erro ao carregar restaurantes: ${erro}`
-              : busca
-              ? "Nenhum restaurante encontrado."
-              : "Nenhum restaurante disponível."}
-          </Text>
+          <EstadoVazio
+            cores={cores}
+            icone={erro ? "alert-circle-outline" : "search-outline"}
+            titulo={
+              carregando
+                ? "Carregando restaurantes..."
+                : erro
+                ? "Não foi possível carregar"
+                : busca
+                ? "Nenhum restaurante encontrado."
+                : "Nenhum restaurante disponível."
+            }
+            texto={erro ? `Erro ao carregar restaurantes: ${erro}` : undefined}
+          />
         }
         keyExtractor={(item) =>
           item.id.toString()
         }
         renderItem={({ item }) => (
-          <TouchableOpacity
-            style={[ styles.card,
-              {
-                backgroundColor: cores.card,
-              },
-          ]}
+          <CartaoRestaurante
+            restaurante={item}
+            cores={cores}
             onPress={() =>
               navigation.navigate(
                 "Restaurant",
@@ -76,80 +78,11 @@ export default function SearchScreen({
                 }
               )
             }
-          >
-            <Text style={[styles.nome,
-              {
-                color: cores.texto,
-              },
-            ]}>
-              {item.nome}
-            </Text>
-
-            {!!item.descricao && (
-              <Text style={[styles.categoria,
-                {
-                  color: cores.secundario,
-                },
-              ]}
-              numberOfLines={2}>
-                {item.descricao}
-              </Text>
-            )}
-
-            {!!textoHorario(item) && (
-              <Text style={[styles.nota,
-                {
-                  color: cores.principal,
-                },
-              ]}>
-                🕒 {textoHorario(item)}
-              </Text>
-            )}
-          </TouchableOpacity>
+          />
         )}
       />
 
       <Menu navigation={navigation} />
-    </View>
+    </Tela>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 15,
-    paddingBottom: 80,
-  },
-
-  input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 15,
-  },
-
-  card: {
-    backgroundColor: "#fff",
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
-    elevation: 3,
-  },
-
-  nome: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-
-  categoria: {
-    color: "#666",
-    marginTop: 5,
-  },
-
-  nota: {
-    marginTop: 5,
-    color: "#e63946",
-    fontWeight: "bold",
-  },
-});

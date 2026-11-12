@@ -3,15 +3,20 @@ import {
   View,
   Text,
   FlatList,
+  Image,
+  Pressable,
   StyleSheet,
-  TouchableOpacity,
   Alert,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { carrinho } from "../data/carrinho";
 import { favoritos } from "../data/favoritos";
 import { listarProdutos, textoHorario } from "../data/restaurantes";
 import { ThemeContext } from "../context/ThemeContext";
+import { Botao, Cartao, Chip, EstadoVazio, Tela } from "../components/UI";
+import { espaco, fonte, raio, sombra } from "../theme/tema";
 
 
 export default function RestaurantScreen({
@@ -25,6 +30,10 @@ export default function RestaurantScreen({
   const [produtos, setProdutos] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
+  const [favoritado, setFavoritado] = useState(
+    favoritos.some((item) => item.id === restaurante.id)
+  );
+  const [, atualizarCarrinho] = useState(0);
 
   // Cardápio vem do banco: os mesmos produtos que o restaurante cadastra no painel.
   useEffect(() => {
@@ -68,6 +77,8 @@ export default function RestaurantScreen({
         quantidade: 1,
       });
     }
+
+    atualizarCarrinho((n) => n + 1);
 
     Alert.alert(
       "Sucesso",
@@ -113,6 +124,7 @@ export default function RestaurantScreen({
     }
 
     favoritos.push(restaurante);
+    setFavoritado(true);
 
     Alert.alert(
       "Sucesso",
@@ -120,178 +132,339 @@ export default function RestaurantScreen({
     );
   }
 
+  const insets = useSafeAreaInsets();
+  const horario = textoHorario(restaurante);
+  const inicial = (restaurante.nome || "?").trim().charAt(0).toUpperCase();
+  const totalItens = carrinho.reduce((soma, item) => soma + item.quantidade, 0);
+  const totalValor = carrinho.reduce(
+    (soma, item) => soma + item.preco * item.quantidade,
+    0
+  );
+
+  const cabecalho = (
+    <View>
+      <View style={[styles.capa, { backgroundColor: cores.principalSuave }]}>
+        {restaurante.imagem_capa_url ? (
+          <Image
+            source={{ uri: restaurante.imagem_capa_url }}
+            style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+          />
+        ) : (
+          <Ionicons name="restaurant" size={56} color={cores.principal} style={{ opacity: 0.3 }} />
+        )}
+      </View>
+
+      <View style={styles.identidade}>
+        <View style={styles.linhaTopo}>
+          <View
+            style={[
+              styles.logo,
+              { backgroundColor: cores.principal, borderColor: cores.fundo },
+            ]}
+          >
+            {restaurante.logo_url ? (
+              <Image source={{ uri: restaurante.logo_url }} style={styles.logoImagem} />
+            ) : (
+              <Text style={styles.logoInicial}>{inicial}</Text>
+            )}
+          </View>
+
+          <Pressable
+            onPress={favoritarRestaurante}
+            accessibilityRole="button"
+            accessibilityLabel="Favoritar"
+            style={[
+              styles.favorito,
+              {
+                backgroundColor: favoritado ? cores.principalSuave : cores.card,
+                borderColor: favoritado ? cores.principal : cores.borda,
+              },
+            ]}
+          >
+            <Ionicons
+              name={favoritado ? "heart" : "heart-outline"}
+              size={21}
+              color={favoritado ? cores.principal : cores.texto}
+            />
+            <Text
+              style={[
+                styles.favoritoTexto,
+                { color: favoritado ? cores.principal : cores.texto },
+              ]}
+            >
+              {favoritado ? "Favoritado" : "Favoritar"}
+            </Text>
+          </Pressable>
+        </View>
+
+        <Text style={[styles.nome, { color: cores.texto }]}>
+          {restaurante.nome}
+        </Text>
+
+        {!!restaurante.descricao && (
+          <Text style={[styles.descricao, { color: cores.secundario }]}>
+            {restaurante.descricao}
+          </Text>
+        )}
+
+        <View style={styles.infos}>
+          {!!horario && (
+            <Chip cores={cores} tom="principal" icone="time-outline" texto={horario} />
+          )}
+          <Chip cores={cores} icone="bag-handle-outline" texto="Retirada no local" />
+        </View>
+
+        {!!restaurante.endereco && (
+          <View style={styles.endereco}>
+            <Ionicons name="location-outline" size={16} color={cores.secundario} />
+            <Text style={[styles.enderecoTexto, { color: cores.secundario }]}>
+              {restaurante.endereco}
+            </Text>
+          </View>
+        )}
+
+        <Text style={[styles.tituloProdutos, { color: cores.texto }]}>
+          Cardápio
+        </Text>
+      </View>
+    </View>
+  );
+
   return (
-    <View style={[styles.container, { backgroundColor: cores.fundo }]}>
-      <Text style={[styles.nome, { color: cores.texto }]}>
-        {restaurante.nome}
-      </Text>
-
-      <TouchableOpacity
-        style={[styles.botaoFavorito, { backgroundColor: cores.principal }]}
-        onPress={favoritarRestaurante}
-      >
-        <Text style={styles.textoFavorito}>Favoritar</Text>
-      </TouchableOpacity>
-
-      {!!restaurante.descricao && (
-        <Text style={[styles.info, { color: cores.secundario }]}>
-          {restaurante.descricao}
-        </Text>
-      )}
-
-      {!!textoHorario(restaurante) && (
-        <Text style={[styles.info, { color: cores.secundario }]}>
-          Funcionamento: {textoHorario(restaurante)}
-        </Text>
-      )}
-
-      <Text style={[styles.info, { color: cores.secundario }]}>
-        Retirada no local
-        {restaurante.endereco ? `: ${restaurante.endereco}` : ""}
-      </Text>
-
-      <Text style={[styles.tituloProdutos, { color: cores.texto }]}>
-        Cardápio
-        </Text>
+    <Tela cores={cores}>
       <FlatList
         style={{ flex: 1 }}
         data={produtos}
         keyExtractor={(item) => item.id.toString()}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={cabecalho}
+        contentContainerStyle={{
+          paddingBottom: (totalItens > 0 ? 96 : 24) + insets.bottom,
+          flexGrow: 1,
+        }}
         ListEmptyComponent={
-          <Text style={{ color: cores.secundario }}>
-            {erro
-              ? `Erro ao carregar: ${erro}`
-              : carregando
-              ? "Carregando..."
-              : "Este restaurante ainda não cadastrou produtos."}
-          </Text>
+          <EstadoVazio
+            cores={cores}
+            icone={erro ? "alert-circle-outline" : "fast-food-outline"}
+            titulo={
+              erro
+                ? "Não foi possível carregar"
+                : carregando
+                ? "Carregando..."
+                : "Este restaurante ainda não cadastrou produtos."
+            }
+            texto={erro ? `Erro ao carregar: ${erro}` : undefined}
+          />
         }
         renderItem={({ item }) => (
-          <View
-            style={[
-              styles.produto,
-              { borderBottomColor: cores.secundario },
-            ]}
-          >
-            <View style={{ flex: 1, paddingRight: 10 }}>
-              <Text style={[styles.produtoNome, { color: cores.texto }]}>
-                {item.nome}
-              </Text>
-
-              {!!item.descricao && (
-                <Text style={{ color: cores.secundario, marginTop: 2 }}>
-                  {item.descricao}
-                </Text>
+          <View style={styles.itemLista}>
+            <Cartao cores={cores} estilo={styles.produto}>
+              {!!item.imagem_url && (
+                <Image source={{ uri: item.imagem_url }} style={styles.produtoImagem} />
               )}
 
-              <Text style={[styles.preco, { color: cores.secundario }]}>
-                R$ {Number(item.preco).toFixed(2)}
-              </Text>
-            </View>
+              <View style={{ flex: 1, paddingRight: espaco.sm }}>
+                <Text style={[styles.produtoNome, { color: cores.texto }]}>
+                  {item.nome}
+                </Text>
 
-            <TouchableOpacity
-              style={[styles.botao, { backgroundColor: cores.principal }]}
-              onPress={() => adicionarCarrinho(item)}
-            >
-              <Text style={styles.botaoTexto}>+</Text>
-            </TouchableOpacity>
+                {!!item.descricao && (
+                  <Text
+                    style={[styles.produtoDescricao, { color: cores.secundario }]}
+                    numberOfLines={2}
+                  >
+                    {item.descricao}
+                  </Text>
+                )}
+
+                <Text style={[styles.preco, { color: cores.principal }]}>
+                  R$ {Number(item.preco).toFixed(2)}
+                </Text>
+              </View>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.botao,
+                  { backgroundColor: cores.principal },
+                  sombra(cores, 2),
+                  pressed && { opacity: 0.85, transform: [{ scale: 0.94 }] },
+                ]}
+                onPress={() => adicionarCarrinho(item)}
+                accessibilityRole="button"
+                accessibilityLabel={`Adicionar ${item.nome} ao carrinho`}
+              >
+                <Ionicons name="add" size={26} color="#FFFFFF" />
+              </Pressable>
+            </Cartao>
           </View>
         )}
       />
 
-      <TouchableOpacity
-        style={[styles.botaoCarrinho, { backgroundColor: cores.principal }]}
-        onPress={() => navigation.navigate("Carrinho")}
-      >
-        <Text style={styles.botaoCarrinhoTexto}>Ver Carrinho</Text>
-      </TouchableOpacity>
-    </View>
+      {totalItens > 0 && (
+        <View
+          style={[
+            styles.barraCarrinho,
+            { paddingBottom: insets.bottom + espaco.md, backgroundColor: cores.fundo, borderTopColor: cores.borda },
+          ]}
+        >
+          <Botao
+            cores={cores}
+            icone="cart"
+            titulo={`Ver Carrinho · ${totalItens} ${totalItens === 1 ? "item" : "itens"} · R$ ${totalValor.toFixed(2)}`}
+            onPress={() => navigation.navigate("Carrinho")}
+          />
+        </View>
+      )}
+    </Tela>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 15,
-    backgroundColor: "#fff",
+  capa: {
+    height: 170,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  identidade: {
+    paddingHorizontal: espaco.xl,
+  },
+
+  linhaTopo: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    marginTop: -36,
+  },
+
+  logo: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+
+  logoImagem: {
+    width: "100%",
+    height: "100%",
+  },
+
+  logoInicial: {
+    color: "#FFFFFF",
+    fontSize: 30,
+    fontWeight: "800",
+  },
+
+  favorito: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: raio.pill,
+    borderWidth: 1.5,
+    marginBottom: 4,
+  },
+
+  favoritoTexto: {
+    marginLeft: 6,
+    fontSize: fonte.corpo - 1,
+    fontWeight: "700",
   },
 
   nome: {
     fontSize: 28,
-    fontWeight: "bold",
+    fontWeight: "800",
+    letterSpacing: -0.6,
+    marginTop: espaco.md,
   },
 
-  info: {
-    marginTop: 5,
-    color: "#666",
-    fontSize: 15,
+  descricao: {
+    marginTop: 6,
+    fontSize: fonte.corpo,
+    lineHeight: 22,
+  },
+
+  infos: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: espaco.sm,
+    marginTop: espaco.lg,
+  },
+
+  endereco: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: espaco.md,
+  },
+
+  enderecoTexto: {
+    flex: 1,
+    fontSize: fonte.corpo - 1,
   },
 
   tituloProdutos: {
-    fontSize: 22,
-    fontWeight: "bold",
-    marginTop: 25,
-    marginBottom: 15,
+    fontSize: fonte.titulo,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+    marginTop: espaco.xxl,
+    marginBottom: espaco.md,
   },
 
-  botaoCarrinho: {
-    backgroundColor: "#e63946",
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 15,
-  },
-
-  botaoCarrinhoTexto: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-
-  botaoFavorito: {
-    backgroundColor: "#ff9800",
-    padding: 10,
-    borderRadius: 8,
-    marginTop: 15,
-    alignSelf: "flex-start",
-  },
-
-  textoFavorito: {
-    color: "#fff",
-    fontWeight: "bold",
+  itemLista: {
+    paddingHorizontal: espaco.xl,
+    marginBottom: espaco.md,
   },
 
   produto: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    padding: espaco.md,
+  },
+
+  produtoImagem: {
+    width: 76,
+    height: 76,
+    borderRadius: raio.md,
+    marginRight: espaco.md,
   },
 
   produtoNome: {
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: fonte.subtitulo,
+    fontWeight: "700",
+  },
+
+  produtoDescricao: {
+    marginTop: 2,
+    fontSize: fonte.corpo - 1,
+    lineHeight: 19,
   },
 
   preco: {
-    marginTop: 5,
-    color: "#666",
+    marginTop: 6,
+    fontSize: fonte.subtitulo,
+    fontWeight: "800",
   },
 
   botao: {
-    backgroundColor: "#e63946",
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: "center",
     alignItems: "center",
   },
 
-  botaoTexto: {
-    color: "#fff",
-    fontSize: 24,
-    fontWeight: "bold",
+  barraCarrinho: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: espaco.xl,
+    paddingTop: espaco.md,
+    borderTopWidth: 1,
   },
 });
