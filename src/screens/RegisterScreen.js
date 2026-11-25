@@ -2,13 +2,13 @@ import React, { useContext, useState } from "react";
 import {
   View,
   Text,
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
 } from "react-native";
+import { Alert } from "../lib/avisos";
 import { supabase } from "../lib/supabase";
 import { cpfValido, somenteDigitos } from "../../Cpf";
 import { ThemeContext } from "../context/ThemeContext";
@@ -34,7 +34,8 @@ export default function RegisterScreen({
       !nome ||
       !email ||
       !senha ||
-      !confirmarSenha
+      !confirmarSenha ||
+      !cpf
     ) {
       Alert.alert(
         "Erro",
@@ -51,9 +52,9 @@ export default function RegisterScreen({
       return;
     }
 
-    // CPF é opcional aqui (o carrinho pede de novo se faltar), mas se vier
-    // preenchido precisa ser válido: a coluna clientes.cpf tem CHECK no banco.
-    if (cpf && !cpfValido(cpf)) {
+    // CPF obrigatório no cadastro: o pagamento (Pix ou cartão) e o salvamento de
+    // cartão usam o CPF gravado em clientes.cpf, sem pedir de novo.
+    if (!cpfValido(cpf)) {
       Alert.alert("Erro", "CPF inválido");
       return;
     }
@@ -131,7 +132,7 @@ export default function RegisterScreen({
           <Campo
             cores={cores}
             icone="id-card-outline"
-            placeholder="CPF (opcional)"
+            placeholder="CPF"
             keyboardType="numeric"
             maxLength={14}
             value={cpf}

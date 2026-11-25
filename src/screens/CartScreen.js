@@ -5,14 +5,13 @@ import {
   ScrollView,
   Pressable,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Switch,
 } from "react-native";
+import { Alert } from "../lib/avisos";
 import { Ionicons } from "@expo/vector-icons";
 import * as WebBrowser from "expo-web-browser";
-
 import { carrinho } from "../data/carrinho";
 import { supabase } from "../lib/supabase";
 import Menu from "../components/Menu";

@@ -6,8 +6,8 @@ import {
   Image,
   Pressable,
   StyleSheet,
-  Alert,
 } from "react-native";
+import { Alert } from "../lib/avisos";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 

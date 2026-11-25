@@ -4,10 +4,10 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  Alert,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { Alert } from "../lib/avisos";
 import { Ionicons } from "@expo/vector-icons";
 
 import Menu from "../components/Menu";
@@ -41,6 +41,8 @@ export default function CardsScreen({ navigation }) {
   const [adicionando, setAdicionando] = useState(false);
   const [form, setForm] = useState(FORM_VAZIO);
   const [salvando, setSalvando] = useState(false);
+  // Mensagem de erro/andamento mostrada na própria tela (não depende de alert do navegador).
+  const [aviso, setAviso] = useState(null);
 
   // undefined = carregando | null = cliente ainda sem CPF cadastrado
   const [cpfCliente, setCpfCliente] = useState(undefined);
@@ -48,42 +50,64 @@ export default function CardsScreen({ navigation }) {
   const precisaCpf = cpfCliente === null;
 
   const carregar = useCallback(async () => {
-    const [{ data, error }, cpfSalvo] = await Promise.all([
-      listarCartoes(),
-      buscarCpfCliente(),
-    ]);
+    try {
+      const [{ data, error }, cpfSalvo] = await Promise.all([
+        listarCartoes(),
+        buscarCpfCliente(),
+      ]);
 
-    setErro(error ? error.message : null);
-    setCartoes(data || []);
-    setCpfCliente(cpfSalvo);
-    setCarregando(false);
+      setErro(error ? error.message : null);
+      setCartoes(data || []);
+      setCpfCliente(cpfSalvo);
+    } catch (e) {
+      // Sem isto o botão Salvar ficava desabilitado para sempre (cpfCliente indefinido).
+      console.warn("[cartoes] falha ao carregar:", e);
+      setErro(e?.message || "falha ao carregar");
+      setCpfCliente(null);
+    } finally {
+      setCarregando(false);
+    }
   }, []);
 
   useEffect(() => {
     carregar();
   }, [carregar]);
 
+  function falhar(titulo, mensagem) {
+    console.warn("[cartoes]", titulo, "-", mensagem);
+    setAviso(`${titulo}: ${mensagem}`);
+    Alert.alert(titulo, mensagem);
+  }
+
   async function salvar() {
+    setAviso(null);
+    console.log("[cartoes] clicou em Salvar", { precisaCpf });
+
     if (precisaCpf && !cpfValido(soDigitos(cpf))) {
-      Alert.alert("CPF inválido", "Confira o CPF informado.");
+      falhar("CPF inválido", "Confira o CPF informado.");
       return;
     }
 
     const erroForm = validarCartao(form);
     if (erroForm) {
-      Alert.alert("Confira o cartão", erroForm);
+      falhar("Confira o cartão", erroForm);
       return;
     }
 
     setSalvando(true);
-    const { cartao, erro: mensagem } = await salvarCartao(
-      form,
-      precisaCpf ? cpf : null
-    );
+    console.log("[cartoes] enviando para salvar-cartao...");
+    let resultado;
+    try {
+      resultado = await salvarCartao(form, precisaCpf ? cpf : null);
+    } catch (e) {
+      resultado = { cartao: null, erro: e?.message || "erro inesperado" };
+    }
     setSalvando(false);
+    const { cartao, erro: mensagem } = resultado;
+    console.log("[cartoes] resposta:", cartao ? "ok" : mensagem);
 
     if (!cartao) {
-      Alert.alert("Não foi possível salvar o cartão", mensagem);
+      falhar("Não foi possível salvar o cartão", mensagem);
       return;
     }
 
@@ -212,6 +236,12 @@ export default function CardsScreen({ navigation }) {
                   value={cpf}
                   onChangeText={(t) => setCpf(mascararCpf(t))}
                 />
+              )}
+
+              {!!aviso && (
+                <Text style={{ color: cores.erro, marginTop: espaco.md, fontWeight: "600" }}>
+                  {aviso}
+                </Text>
               )}
 
               <Botao

@@ -622,3 +622,78 @@ create policy imagens_cliente_delete on storage.objects
   );
 
 commit;
+
+-- =========================================================
+-- CARTOES SALVOS (tokenizacao Asaas)
+-- =========================================================
+-- Rode DEPOIS de 20261007000000_esquema_foodconnect.sql, de uma so vez no SQL Editor.
+-- Roda dentro de uma transacao: se algo falhar, nada fica criado pela metade.
+-- Nao mexe em nenhuma tabela existente (pedidos, clientes etc.) -> o Pix nao e afetado.
+--
+-- Tabelas novas:
+--   cartoes_salvos  -> token do cartao (Asaas) + 4 ultimos digitos + bandeira
+--   clientes_asaas  -> id do cliente no Asaas (1 por cliente do app)
+--
+-- NUNCA ficam aqui: numero completo do cartao e CVV.
+-- O token do Asaas (asaas_credit_card_token) e SECRETO: so as Edge Functions leem.
+-- =========================================================
+
+begin;
+
+-- ---------- CLIENTE NO ASAAS ----------
+-- O token do cartao so funciona para o cliente Asaas em que foi criado,
+-- por isso guardamos o id e reutilizamos nas compras futuras.
+create table if not exists public.clientes_asaas (
+  cliente_id uuid primary key references public.clientes(id) on delete cascade,
+  asaas_customer_id text not null unique,
+  created_at timestamptz not null default now()
+);
+
+-- ---------- CARTOES SALVOS ----------
+create table if not exists public.cartoes_salvos (
+  id uuid primary key default gen_random_uuid(),
+  cliente_id uuid not null references public.clientes(id) on delete cascade,
+  asaas_credit_card_token text not null,      -- SECRETO: so as Edge Functions leem
+  ultimos_digitos text not null check (ultimos_digitos ~ '^[0-9]{4}$'),
+  bandeira text,                              -- VISA, MASTERCARD, ELO...
+  created_at timestamptz not null default now(),
+  unique (cliente_id, asaas_credit_card_token)
+);
+
+create index if not exists idx_cartoes_salvos_cliente
+  on public.cartoes_salvos(cliente_id, created_at desc);
+
+-- ---------- SEGURANCA (RLS + permissoes) ----------
+alter table public.clientes_asaas enable row level security;
+alter table public.cartoes_salvos enable row level security;
+
+-- O Supabase pode conceder acesso automatico a tabelas novas: tiramos tudo
+-- e liberamos so o necessario.
+revoke all on public.clientes_asaas from anon, authenticated;
+revoke all on public.cartoes_salvos from anon, authenticated;
+
+-- clientes_asaas: nenhum acesso pelo app (sem grants e sem policies).
+
+-- cartoes_salvos: o app so le colunas liberadas (o token NAO esta na lista)
+-- e so apaga os proprios cartoes. Nao existe insert/update pelo app:
+-- cartoes so entram pela Edge Function salvar-cartao (service role).
+-- created_at precisa estar liberado porque o app ordena por ele.
+grant select (id, ultimos_digitos, bandeira, created_at)
+  on public.cartoes_salvos to authenticated;
+grant delete on public.cartoes_salvos to authenticated;
+
+drop policy if exists cartoes_salvos_select on public.cartoes_salvos;
+create policy cartoes_salvos_select on public.cartoes_salvos
+  for select to authenticated
+  using (cliente_id = auth.uid());
+
+drop policy if exists cartoes_salvos_delete on public.cartoes_salvos;
+create policy cartoes_salvos_delete on public.cartoes_salvos
+  for delete to authenticated
+  using (cliente_id = auth.uid());
+
+-- Edge Functions (service role) precisam de acesso as duas tabelas.
+grant all on public.clientes_asaas to service_role;
+grant all on public.cartoes_salvos to service_role;
+
+commit;

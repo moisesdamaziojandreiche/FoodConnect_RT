@@ -3,11 +3,18 @@
 //
 // Corpo esperado:
 //   { empresa_id, itens: [{ produto_id, quantidade, observacao? }],
-//     nome?, cpfCnpj?, endereco_entrega?, observacao? }
+//     nome?, cpfCnpj?, endereco_entrega?, observacao?, cartao_id? }
 // Resposta: { pedido_id, valor_total, invoice_url }
 //
-// Esquema usado (ver migrations/20261007000000_esquema_foodconnect.sql):
-//   empresas, empresa_pagamento, produtos, clientes, pedidos, itens_pedido
+// Sem cartao_id: fluxo de sempre (Pix/boleto/cartão na página do Asaas).
+// Com cartao_id (cartão salvo): cobra direto no cartão usando o token.
+//   - 402 = cartão recusado (o pedido é cancelado)
+//   - 202 { processando: true } = demorou/inconclusivo; o webhook confirma depois
+//
+// Esquema usado (ver migrations/20261007000000_esquema_foodconnect.sql
+// e migrations/20261124000000_cartoes_salvos.sql):
+//   empresas, empresa_pagamento, produtos, clientes, pedidos, itens_pedido,
+//   cartoes_salvos, clientes_asaas (estas duas só no pagamento com cartão salvo)
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -36,6 +43,19 @@ function json(body: unknown, status = 200) {
   });
 }
 
+// Mesma mensagem de antes; só ganhou status e códigos para o ramo de cartão decidir (402 etc.)
+class AsaasError extends Error {
+  status: number;
+  codes: string[];
+  constructor(status: number, data: any) {
+    super(`Asaas ${status}: ${JSON.stringify(data?.errors ?? data)}`);
+    this.status = status;
+    this.codes = (Array.isArray(data?.errors) ? data.errors : [])
+      .map((e: any) => String(e?.code ?? ""))
+      .filter(Boolean);
+  }
+}
+
 async function asaas(path: string, init: RequestInit = {}) {
   const res = await fetch(`${ASAAS_URL}${path}`, {
     ...init,
@@ -48,9 +68,20 @@ async function asaas(path: string, init: RequestInit = {}) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(`Asaas ${res.status}: ${JSON.stringify(data?.errors ?? data)}`);
+    throw new AsaasError(res.status, data);
   }
   return data;
+}
+
+// O Asaas exige o IP do APARELHO do cliente (não o do servidor) nas cobranças no cartão.
+// cf-connecting-ip é definido pela borda e não pode ser forjado pelo app.
+function ipDoCliente(req: Request): string | null {
+  const bruto =
+    req.headers.get("cf-connecting-ip") ??
+    req.headers.get("x-real-ip") ??
+    (req.headers.get("x-forwarded-for") ?? "").split(",")[0];
+  const ip = (bruto ?? "").trim();
+  return ip && ip.length <= 45 && /^[0-9a-fA-F:.]+$/.test(ip) ? ip : null;
 }
 
 // Data de hoje no horário de Brasília (YYYY-MM-DD)
@@ -184,6 +215,33 @@ Deno.serve(async (req) => {
   const valorTotal = totalCentavos / 100;
   if (valorTotal <= 0) return json({ error: "Valor inválido" }, 400);
 
+  // Cartão salvo (opcional). Confere ANTES de criar o pedido, para um cartao_id
+  // inválido não deixar pedido pela metade. Sem cartao_id nada disto roda (fluxo Pix).
+  let cartao: { token: string; customerId: string; remoteIp: string } | null = null;
+  if (body?.cartao_id) {
+    const { data: salvo } = await admin
+      .from("cartoes_salvos")
+      .select("asaas_credit_card_token")
+      .eq("id", String(body.cartao_id))
+      .eq("cliente_id", user.id) // só cartões do próprio cliente
+      .maybeSingle();
+    const { data: vinculo } = await admin
+      .from("clientes_asaas")
+      .select("asaas_customer_id")
+      .eq("cliente_id", user.id)
+      .maybeSingle();
+    if (!salvo || !vinculo) return json({ error: "Cartão não encontrado" }, 400);
+
+    const remoteIp = ipDoCliente(req);
+    if (!remoteIp) return json({ error: "Não foi possível identificar o dispositivo." }, 400);
+
+    cartao = {
+      token: salvo.asaas_credit_card_token,
+      customerId: vinculo.asaas_customer_id,
+      remoteIp,
+    };
+  }
+
   // 4) Cria o pedido aguardando pagamento
   const { data: pedido, error: pedErr } = await admin
     .from("pedidos")
@@ -214,21 +272,28 @@ Deno.serve(async (req) => {
   }
 
   // 5) Cria cliente + cobrança no Asaas
+  let cobrancaCriada = false;
   try {
-    const customer = await asaas("/customers", {
-      method: "POST",
-      body: JSON.stringify({
-        name: nome,
-        cpfCnpj,
-        email: user.email,
-        externalReference: user.id,
-        notificationDisabled: true,
-      }),
-    });
+    // Cartão salvo usa o cliente Asaas em que o token foi criado (salvar-cartao).
+    // Sem cartão, segue exatamente como antes: cria o cliente no Asaas.
+    const customerId: string = cartao
+      ? cartao.customerId
+      : (
+        await asaas("/customers", {
+          method: "POST",
+          body: JSON.stringify({
+            name: nome,
+            cpfCnpj,
+            email: user.email,
+            externalReference: user.id,
+            notificationDisabled: true,
+          }),
+        })
+      ).id;
 
     const cobranca: Record<string, unknown> = {
-      customer: customer.id,
-      billingType: BILLING_TYPE,
+      customer: customerId,
+      billingType: cartao ? "CREDIT_CARD" : BILLING_TYPE,
       value: valorTotal,
       dueDate: hojeBR(),
       description: `Pedido FoodConnect ${pedido.id.slice(0, 8)}`,
@@ -250,11 +315,18 @@ Deno.serve(async (req) => {
       ];
     }
 
+    if (cartao) {
+      cobranca.creditCardToken = cartao.token;
+      cobranca.remoteIp = cartao.remoteIp;
+    }
+
     const payment = await asaas("/payments", {
       method: "POST",
       body: JSON.stringify(cobranca),
+      // Cartão: a doc do Asaas pede timeout mínimo de 60 s (a aprovação pode demorar)
+      ...(cartao ? { signal: AbortSignal.timeout(60_000) } : {}),
     });
-
+    cobrancaCriada = true;
     const { error: updErr } = await admin
       .from("pedidos")
       .update({
@@ -271,6 +343,28 @@ Deno.serve(async (req) => {
     });
   } catch (e) {
     console.error("Erro Asaas:", e instanceof Error ? e.message : e);
+
+    if (cartao) {
+      // Cartão recusado: cancela o pedido e avisa o app (402). Não detalha o motivo ao cliente.
+      if (e instanceof AsaasError && e.status === 400 &&
+          e.codes.some((c) => c.startsWith("invalid_creditCard"))) {
+        await admin
+          .from("pedidos")
+          .update({ status: "cancelado", payment_status: "cancelado" })
+          .eq("id", pedido.id);
+        return json({ error: "Pagamento recusado. Tente outro cartão." }, 402);
+      }
+
+      // Demorou ou a cobrança já foi criada mas não deu para gravar: NÃO cancela
+      // (o cliente pode ter sido cobrado). O webhook confirma ou cancela depois,
+      // achando o pedido pelo externalReference.
+      const demorou = e instanceof DOMException &&
+        (e.name === "TimeoutError" || e.name === "AbortError");
+      if (cobrancaCriada || demorou) {
+        return json({ pedido_id: pedido.id, valor_total: valorTotal, processando: true }, 202);
+      }
+    }
+
     await admin
       .from("pedidos")
       .update({ status: "cancelado", payment_status: "cancelado" })

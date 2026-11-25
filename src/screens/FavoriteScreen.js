@@ -1,8 +1,8 @@
 import React, { useContext } from "react";
 import {
   FlatList,
-  Alert,
 } from "react-native";
+import { Alert } from "../lib/avisos";
 
 import { favoritos } from "../data/favoritos";
 import Menu from "../components/Menu";

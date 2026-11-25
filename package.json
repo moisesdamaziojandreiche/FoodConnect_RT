@@ -30,6 +30,7 @@
   "private": true,
   "devDependencies": {
     "@types/react": "~19.1.10",
+    "supabase": "^3.4.0",
     "typescript": "~5.9.2"
   }
 }

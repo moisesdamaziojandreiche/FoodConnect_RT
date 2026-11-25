@@ -2,7 +2,6 @@ import React, { useContext, useState } from "react";
 import {
   View,
   Text,
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -10,6 +9,7 @@ import {
   ScrollView,
   StyleSheet,
 } from "react-native";
+import { Alert } from "../lib/avisos";
 import { supabase } from "../lib/supabase";
 import { ThemeContext } from "../context/ThemeContext";
 import { Botao, Campo, Tela } from "../components/UI";

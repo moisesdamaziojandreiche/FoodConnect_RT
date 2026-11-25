@@ -28,7 +28,13 @@ function tokenIgual(a: string, b: string) {
 }
 
 const EVENTOS_PAGO = ["PAYMENT_CONFIRMED", "PAYMENT_RECEIVED"];
-const EVENTOS_CANCELADO = ["PAYMENT_OVERDUE", "PAYMENT_DELETED"];
+// Os dois últimos só acontecem em cobranças no cartão (recusa/análise de risco); no Pix nunca chegam.
+const EVENTOS_CANCELADO = [
+  "PAYMENT_OVERDUE",
+  "PAYMENT_DELETED",
+  "PAYMENT_CREDIT_CARD_CAPTURE_REFUSED",
+  "PAYMENT_REPROVED_BY_RISK_ANALYSIS",
+];
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("método não permitido", { status: 405 });
