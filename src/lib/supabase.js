@@ -38,6 +38,8 @@ const stub = {
     resetPasswordForEmail: async () => ({ data: null, error: NAO_CONFIGURADO }),
     signOut: async () => ({ error: null }),
     getUser: async () => ({ data: { user: null }, error: NAO_CONFIGURADO }),
+    getSession: async () => ({ data: { session: null }, error: null }),
+    onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
   },
   functions: {
     invoke: async () => ({ data: null, error: NAO_CONFIGURADO }),

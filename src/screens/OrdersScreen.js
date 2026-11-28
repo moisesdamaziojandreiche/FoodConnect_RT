@@ -71,7 +71,7 @@ export default function OrdersScreen({ navigation }) {
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(null);
 
-  const carregar = useCallback(async () => {
+    const carregar = useCallback(async () => {
     if (!supabase.from) {
       setErro("Supabase não configurado");
       setCarregando(false);
@@ -86,44 +86,63 @@ export default function OrdersScreen({ navigation }) {
       )
       .order("created_at", { ascending: false });
 
-    setErro(error ? error.message : null);
-    setPedidos(data || []);
+    if (error) {
+      // Mantém a lista que já estava na tela em vez de apagá-la.
+      setErro(error.message);
+    } else {
+      setErro(null);
+      setPedidos(data || []);
+    }
+
     setCarregando(false);
   }, []);
 
-  useEffect(() => {
+    useEffect(() => {
     carregar();
 
-    if (!supabase.channel) return undefined;
+    // Plano B: se o tempo real falhar, atualiza a cada 10 s.
+    const intervalo = setInterval(carregar, 10000);
 
-    let canal;
+    // Atualiza também sempre que a tela volta a ficar em foco.
+    const desfazerFoco = navigation.addListener("focus", carregar);
+
+    let canal = null;
     let cancelado = false;
 
     // Tempo real: quando o restaurante muda o status no painel, a lista atualiza.
-    supabase.auth.getUser().then(({ data }) => {
-      const usuario = data?.user;
-      if (!usuario || cancelado) return;
+    if (supabase.channel) {
+      supabase.auth.getSession().then(({ data }) => {
+        const usuario = data?.session?.user;
+        if (!usuario || cancelado) return;
 
-      canal = supabase
-        .channel(`meus-pedidos-${usuario.id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "pedidos",
-            filter: `cliente_id=eq.${usuario.id}`,
-          },
-          () => carregar()
-        )
-        .subscribe();
-    });
+        canal = supabase
+          .channel(`meus-pedidos-${usuario.id}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "pedidos",
+              filter: `cliente_id=eq.${usuario.id}`,
+            },
+            () => carregar()
+          )
+          .subscribe((estado) => {
+            if (estado === "SUBSCRIBED") carregar();
+            if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT") {
+              console.warn("Realtime (pedidos):", estado);
+            }
+          });
+      });
+    }
 
     return () => {
       cancelado = true;
+      clearInterval(intervalo);
+      desfazerFoco();
       if (canal) supabase.removeChannel(canal);
     };
-  }, [carregar]);
+  }, [carregar, navigation]);
 
   return (
     <Tela cores={cores} topo>

@@ -10,7 +10,7 @@ import {
 import { Alert } from "../lib/avisos";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
+import { supabase } from "../lib/supabase";
 import { carrinho } from "../data/carrinho";
 import { favoritos } from "../data/favoritos";
 import { listarProdutos, textoHorario } from "../data/restaurantes";
@@ -36,25 +36,53 @@ export default function RestaurantScreen({
   const [, atualizarCarrinho] = useState(0);
 
   // Cardápio vem do banco: os mesmos produtos que o restaurante cadastra no painel.
+    // Cardápio vem do banco e acompanha o painel em tempo real.
   useEffect(() => {
     let ativo = true;
 
-    listarProdutos(restaurante.id).then(({ data, error }) => {
+    async function carregar() {
+      const { data, error } = await listarProdutos(restaurante.id);
       if (!ativo) return;
 
       if (error) {
         setErro(error.message);
       } else {
+        setErro(null);
         setProdutos(data || []);
       }
 
       setCarregando(false);
-    });
+    }
+
+    carregar();
+
+    const intervalo = setInterval(carregar, 15000);
+    const desfazerFoco = navigation.addListener("focus", carregar);
+
+    let canal = null;
+    if (supabase.channel) {
+      canal = supabase
+        .channel(`produtos-${restaurante.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "produtos",
+            filter: `empresa_id=eq.${restaurante.id}`,
+          },
+          () => carregar()
+        )
+        .subscribe();
+    }
 
     return () => {
       ativo = false;
+      clearInterval(intervalo);
+      desfazerFoco();
+      if (canal) supabase.removeChannel(canal);
     };
-  }, [restaurante.id]);
+  }, [restaurante.id, navigation]);
 
   function inserirNoCarrinho(produto) {
     const chaveProduto = `${restaurante.id}-${produto.id}`;
@@ -88,6 +116,10 @@ export default function RestaurantScreen({
 
   // Um pedido pertence a um único restaurante.
   function adicionarCarrinho(produto) {
+    if (produto.disponivel === false) {
+      Alert.alert("Indisponível", `${produto.nome} está em falta no momento.`);
+      return;
+    }
     if (
       carrinho.length > 0 &&
       carrinho[0].restauranteId !== restaurante.id
@@ -257,48 +289,72 @@ export default function RestaurantScreen({
             texto={erro ? `Erro ao carregar: ${erro}` : undefined}
           />
         }
-        renderItem={({ item }) => (
-          <View style={styles.itemLista}>
-            <Cartao cores={cores} estilo={styles.produto}>
-              {!!item.imagem_url && (
-                <Image source={{ uri: item.imagem_url }} style={styles.produtoImagem} />
-              )}
+                renderItem={({ item }) => {
+          const emFalta = item.disponivel === false;
 
-              <View style={{ flex: 1, paddingRight: espaco.sm }}>
-                <Text style={[styles.produtoNome, { color: cores.texto }]}>
-                  {item.nome}
-                </Text>
-
-                {!!item.descricao && (
-                  <Text
-                    style={[styles.produtoDescricao, { color: cores.secundario }]}
-                    numberOfLines={2}
-                  >
-                    {item.descricao}
-                  </Text>
+          return (
+            <View style={[styles.itemLista, emFalta && { opacity: 0.55 }]}>
+              <Cartao cores={cores} estilo={styles.produto}>
+                {!!item.imagem_url && (
+                  <Image source={{ uri: item.imagem_url }} style={styles.produtoImagem} />
                 )}
 
-                <Text style={[styles.preco, { color: cores.principal }]}>
-                  R$ {Number(item.preco).toFixed(2)}
-                </Text>
-              </View>
+                <View style={{ flex: 1, paddingRight: espaco.sm }}>
+                  <Text style={[styles.produtoNome, { color: cores.texto }]}>
+                    {item.nome}
+                  </Text>
 
-              <Pressable
-                style={({ pressed }) => [
-                  styles.botao,
-                  { backgroundColor: cores.principal },
-                  sombra(cores, 2),
-                  pressed && { opacity: 0.85, transform: [{ scale: 0.94 }] },
-                ]}
-                onPress={() => adicionarCarrinho(item)}
-                accessibilityRole="button"
-                accessibilityLabel={`Adicionar ${item.nome} ao carrinho`}
-              >
-                <Ionicons name="add" size={26} color="#FFFFFF" />
-              </Pressable>
-            </Cartao>
-          </View>
-        )}
+                  {emFalta && (
+                    <Chip
+                      cores={cores}
+                      tom="erro"
+                      icone="alert-circle-outline"
+                      texto="Em falta"
+                      estilo={{ alignSelf: "flex-start", marginTop: 4 }}
+                    />
+                  )}
+
+                  {!!item.descricao && (
+                    <Text
+                      style={[styles.produtoDescricao, { color: cores.secundario }]}
+                      numberOfLines={2}
+                    >
+                      {item.descricao}
+                    </Text>
+                  )}
+
+                  <Text style={[styles.preco, { color: cores.principal }]}>
+                    R$ {Number(item.preco).toFixed(2)}
+                  </Text>
+                </View>
+
+                <Pressable
+                  disabled={emFalta}
+                  style={({ pressed }) => [
+                    styles.botao,
+                    { backgroundColor: emFalta ? cores.borda : cores.principal },
+                    !emFalta && sombra(cores, 2),
+                    pressed && { opacity: 0.85, transform: [{ scale: 0.94 }] },
+                  ]}
+                  onPress={() => adicionarCarrinho(item)}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: emFalta }}
+                  accessibilityLabel={
+                    emFalta
+                      ? `${item.nome} em falta`
+                      : `Adicionar ${item.nome} ao carrinho`
+                  }
+                >
+                  <Ionicons
+                    name={emFalta ? "close" : "add"}
+                    size={26}
+                    color="#FFFFFF"
+                  />
+                </Pressable>
+              </Cartao>
+            </View>
+          );
+        }}
       />
 
       {totalItens > 0 && (

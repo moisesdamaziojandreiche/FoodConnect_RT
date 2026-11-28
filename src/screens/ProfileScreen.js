@@ -160,7 +160,9 @@ export default function ProfileScreen({
             titulo="Encerrar Sessão"
             icone="log-out-outline"
             variante="perigo"
-            onPress={() => navigation.replace("Login")}
+                        onPress={async () => {
+              await supabase.auth.signOut();
+            }}
           />
         </View>
       </ScrollView>

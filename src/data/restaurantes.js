@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 const NAO_CONFIGURADO = { message: "Supabase não configurado" };
 
 // Restaurantes = tabela `empresas` (a mesma que o painel administra).
+// Restaurantes = tabela `empresas` (a mesma que o painel administra).
 export async function listarRestaurantes() {
   if (!supabase.from) return { data: [], error: NAO_CONFIGURADO };
 
@@ -22,12 +23,13 @@ export function textoHorario(restaurante) {
 }
 
 // Produtos cadastrados pelo restaurante no painel.
+// Produtos cadastrados pelo restaurante no painel.
 export async function listarProdutos(empresaId) {
   if (!supabase.from) return { data: [], error: NAO_CONFIGURADO };
 
   return supabase
     .from("produtos")
-    .select("id, nome, descricao, preco, imagem_url")
+    .select("id, nome, descricao, preco, imagem_url, disponivel")
     .eq("empresa_id", empresaId)
     .order("nome");
 }

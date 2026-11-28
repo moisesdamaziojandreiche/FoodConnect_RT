@@ -1,8 +1,10 @@
-import React, { useContext } from "react";
+import React, { useContext, useEffect, useState } from "react";
+import { ActivityIndicator, View } from "react-native";
 import {
   NavigationContainer,
   DefaultTheme,
   DarkTheme,
+  createNavigationContainerRef,
 } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { StatusBar } from "expo-status-bar";
@@ -19,14 +21,78 @@ import {ThemeProvider, ThemeContext} from "./src/context/ThemeContext";
 import FavoriteScreen from "./src/screens/FavoriteScreen";
 import CardsScreen from "./src/screens/CardsScreen";
 import OrdersScreen from "./src/screens/OrdersScreen";
+import { supabase } from "./src/lib/supabase";
 
 
 
 const Stack = createNativeStackNavigator();
+// Permite navegar de fora das telas (ex.: quando a sessão expira).
+const navegacaoRef = createNavigationContainerRef();
 
 // Fica dentro do ThemeProvider para o navegador seguir o tema claro/escuro.
 function Rotas() {
   const { cores, temaEscuro } = useContext(ThemeContext);
+
+    // null = ainda verificando a sessão salva
+  const [rotaInicial, setRotaInicial] = useState(null);
+
+  useEffect(() => {
+    let ativo = true;
+
+        async function verificarSessao() {
+      try {
+        if (typeof supabase.auth.getSession !== "function") {
+          if (ativo) setRotaInicial("Login");
+          return;
+        }
+
+        const { data } = await supabase.auth.getSession();
+
+        if (!data?.session) {
+          if (ativo) setRotaInicial("Login");
+          return;
+        }
+
+        // Confirma com o servidor que a sessão ainda vale.
+        const { data: resposta, error } = await supabase.auth.getUser();
+
+        if (resposta?.user) {
+          if (ativo) setRotaInicial("Home");
+          return;
+        }
+
+        // Sem internet: mantém o login e deixa o app tentar carregar.
+        if (error?.name === "AuthRetryableFetchError") {
+          if (ativo) setRotaInicial("Home");
+          return;
+        }
+
+        // Sessão inválida ou expirada: limpa e pede login de novo.
+        await supabase.auth.signOut();
+        if (ativo) setRotaInicial("Login");
+      } catch (e) {
+        if (ativo) setRotaInicial("Login");
+      }
+    }
+
+    verificarSessao();
+
+    // Se a sessão acabar (logout ou token inválido), volta para o login.
+    let assinatura = null;
+    if (typeof supabase.auth.onAuthStateChange === "function") {
+      const { data } = supabase.auth.onAuthStateChange((evento) => {
+        if (evento === "SIGNED_OUT" && navegacaoRef.isReady()) {
+          navegacaoRef.resetRoot({ index: 0, routes: [{ name: "Login" }] });
+        }
+      });
+      assinatura = data?.subscription;
+    }
+
+    return () => {
+      ativo = false;
+      assinatura?.unsubscribe();
+    };
+  }, []);
 
   const base = temaEscuro ? DarkTheme : DefaultTheme;
 
@@ -45,12 +111,27 @@ function Rotas() {
   // Telas "de aba" (têm Menu inferior e título próprio) ficam sem cabeçalho nativo.
   const semCabecalho = { headerShown: false };
 
+    if (!rotaInicial) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: cores.fundo,
+        }}
+      >
+        <ActivityIndicator size="large" color={cores.principal} />
+      </View>
+    );
+  }
+
   return (
-    <NavigationContainer theme={temaNavegacao}>
+      <NavigationContainer ref={navegacaoRef} theme={temaNavegacao}>
       <StatusBar style={temaEscuro ? "light" : "dark"} />
 
       <Stack.Navigator
-        initialRouteName="Login"
+         initialRouteName={rotaInicial}
         screenOptions={{
           headerShadowVisible: false,
           headerTintColor: cores.principal,
